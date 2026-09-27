@@ -1,10 +1,9 @@
 -- ================================================
 -- SCRIPT DE VOO COMPLETO (PC + MOBILE)
--- Fly estilo scripts famosos:
+-- Fly estilo famoso:
 --   - Olha pra CIMA e anda = sobe
 --   - Olha pra BAIXO e anda = desce
---   - Anda na direção da câmera
--- Com botão mover (✥/🔒), minimizar e fechar
+-- Botão mover (✥/🔒), minimizar e fechar
 -- ================================================
 
 local Players = game:GetService("Players")
@@ -18,7 +17,7 @@ local VELOCIDADE_MIN = 10
 local VELOCIDADE_MAX = 300
 local VELOCIDADE_INICIAL = 70
 local PASSO_VELOCIDADE = 10
-local VELOCIDADE_MAX_FISICA = 200
+local VELOCIDADE_MAX_FISICA = 250
 
 local COR_FUNDO = Color3.fromRGB(35, 35, 40)
 local COR_BOTAO = Color3.fromRGB(60, 60, 70)
@@ -283,51 +282,70 @@ local function ativarVoo()
 
     antiDetect:iniciar()
 
+    -- Deixa o Humanoid "solto" pra ele não tentar corrigir a posição
+    humanoid.PlatformStand = true
+    humanoid.AutoRotate = false
+
     local camera = workspace.CurrentCamera
 
     conexaoRender = RunService.RenderStepped:Connect(function()
         if not bodyVelocity or not bodyVelocity.Parent then return end
 
-        -- Direção que o jogador está tentando andar (input)
-        local moveDir = humanoid.MoveDirection
+        -- ============================================
+        -- MONTA O VETOR USANDO A CÂMERA (inclui Y)
+        -- ============================================
+        local direcao = Vector3.zero
 
-        -- Direção da câmera (pra onde o jogador está olhando)
-        local lookDir = camera.CFrame.LookVector
+        if isMobile then
+            -- Mobile: usa o joystick nativo
+            local moveDir = humanoid.MoveDirection
+            if moveDir.Magnitude > 0.1 then
+                local camCF = camera.CFrame
+                local dirBase = moveDir.Unit
 
-        -- Se o jogador está segurando alguma tecla/botão de movimento
-        if moveDir.Magnitude > 0.1 then
-            -- Pega a direção da câmera (horizontal e vertical)
-            -- O moveDir diz "pra onde", mas a gente usa a câmera pra decidir "como"
-            local direcao = moveDir.Unit
+                -- Reconstrói usando os eixos da câmera (COM Y)
+                local dirX = camCF.RightVector * dirBase.X
+                local dirZ = camCF.LookVector * dirBase.Z
+                local dirY = camCF.UpVector * dirBase.Y
 
-            -- Aplica velocidade na direção do movimento
-            -- (o moveDir já vem com componente Y se a câmera estiver inclinada)
-            local velFinal = direcao * velocidade
-
-            bodyVelocity.Velocity = antiDetect:clampVelocidade(velFinal)
+                direcao = dirX + dirZ + dirY
+            end
         else
-            -- Sem input = fica parado no ar
+            -- PC: teclas + câmera (COM Y)
+            local camCF = camera.CFrame
+
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                direcao += camCF.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                direcao -= camCF.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                direcao -= camCF.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                direcao += camCF.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                direcao += Vector3.new(0, 1, 0)
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                direcao -= Vector3.new(0, 1, 0)
+            end
+        end
+
+        -- Aplica velocidade
+        if direcao.Magnitude > 0.1 then
+            bodyVelocity.Velocity = antiDetect:clampVelocidade(direcao.Unit * velocidade)
+        else
             bodyVelocity.Velocity = Vector3.zero
         end
 
-        -- Trava a rotação do boneco pra olhar na direção da câmera
-        bodyGyro.CFrame = CFrame.new(rootPart.Position, rootPart.Position + lookDir)
+        -- Trava a rotação pra olhar na direção da câmera
+        bodyGyro.CFrame = CFrame.new(rootPart.Position, rootPart.Position + camera.CFrame.LookVector)
     end)
 
-    -- Aqui está o segredo do "fly famoso":
-    -- Como estamos com HumanoidStateType.Physics + PlatformStand,
-    -- o moveDir leva em conta o Y da câmera.
-    -- Mas pra garantir, vamos forçar o Humanoid a olhar na direção da câmera:
-    humanoid.AutoRotate = false
-
-    -- IMPORTANTE: força o Humanoid a "andar" no ar, sem colisão com chão
-    -- Isso faz o moveDir incluir a direção vertical da câmera
-    pcall(function()
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-    end)
-
-    -- Também precisamos do PlatformStand pra o personagem não cair
-    humanoid.PlatformStand = true
+    controlesMobile.Visible = false
 end
 
 local function desativarVoo()
@@ -491,7 +509,6 @@ local function toqueDentroDoContainer(input)
         and pos.Y >= guiPos.Y and pos.Y <= guiPos.Y + guiSize.Y
 end
 
--- Botão MOVER: ativa/desativa modo arrastar
 botaoMover.MouseButton1Click:Connect(function()
     movendo = not movendo
 
@@ -504,7 +521,6 @@ botaoMover.MouseButton1Click:Connect(function()
     end
 end)
 
--- Início do toque
 UserInputService.InputBegan:Connect(function(input, processado)
     if processado then return end
     if not movendo then return end
@@ -523,7 +539,6 @@ UserInputService.InputBegan:Connect(function(input, processado)
     posicaoInicial = container.Position
 end)
 
--- Movimento do toque
 UserInputService.InputChanged:Connect(function(input, processado)
     if processado then return end
     if not arrastando then return end
@@ -542,7 +557,6 @@ UserInputService.InputChanged:Connect(function(input, processado)
     )
 end)
 
--- Fim do toque
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
