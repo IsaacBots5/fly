@@ -1,7 +1,7 @@
 -- ================================================
 -- SCRIPT DE VOO COMPLETO (PC + MOBILE)
 -- Com GUI automática + Anti-Detect
--- Coloque em: StarterPlayer > StarterPlayerScripts
+-- 2 botões mobile: ↑ subir / ↓ descer
 -- ================================================
 
 local Players = game:GetService("Players")
@@ -16,7 +16,7 @@ local VELOCIDADE_MAX = 200
 local VELOCIDADE_INICIAL = 50
 local PASSO_VELOCIDADE = 10
 local FORCA_SUBIR = 50
-local VELOCIDADE_MAX_FISICA = 90 -- limite pra não parecer "speed hack"
+local VELOCIDADE_MAX_FISICA = 90
 
 local COR_FUNDO = Color3.fromRGB(35, 35, 40)
 local COR_BOTAO = Color3.fromRGB(60, 60, 70)
@@ -34,7 +34,6 @@ local conexaoRender
 local character, humanoid, rootPart
 local minimizado = false
 
--- Estado original do personagem (para restaurar)
 local estadoOriginal = {
     WalkSpeed = 16,
     JumpPower = 50,
@@ -67,22 +66,16 @@ function AntiDetect:iniciar()
     local hum = self.humanoid
     local root = self.rootPart
 
-    -- 1. Salva o estado original
     estadoOriginal.WalkSpeed = hum.WalkSpeed
     estadoOriginal.JumpPower = hum.JumpPower
     estadoOriginal.HipHeight = hum.HipHeight
 
-    -- 2. Mascara o HumanoidStateType para "Physics" (não parece flying)
     hum:SetStateEnabled(Enum.HumanoidStateType.Flying, false)
     hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
     hum:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
     hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-
-    -- Força estado "Physics" que é o mais natural
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 
-    -- 3. Mantém o Humanoid "no chão" logicamente (não cai por gravity)
-    --    Isso evita detecção por scripts que checam Humanoid.FloorMaterial
     self.conexoes[#self.conexoes + 1] = RunService.Stepped:Connect(function()
         if not hum or not hum.Parent then return end
         if hum.FloorMaterial == Enum.Material.Air then
@@ -92,14 +85,9 @@ function AntiDetect:iniciar()
         end
     end)
 
-    -- 4. Guarda o NetworkOwnership pra não parecer "ownership hijack"
-    --    (o Roblox já dá ao LocalPlayer, então não muda nada visualmente)
     pcall(function()
         root:SetNetworkOwner(player)
     end)
-
-    -- 5. Randomiza o nome dos BodyMovers (dificulta scan por nome)
-    --    Feito na criação, veja ativarVoo()
 end
 
 function AntiDetect:parar()
@@ -108,7 +96,6 @@ function AntiDetect:parar()
 
     local hum = self.humanoid
 
-    -- Restaura estados
     pcall(function()
         hum:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
         hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
@@ -116,22 +103,18 @@ function AntiDetect:parar()
         hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
     end)
 
-    -- Restaura propriedades originais
     pcall(function()
         hum.WalkSpeed = estadoOriginal.WalkSpeed
         hum.JumpPower = estadoOriginal.JumpPower
         hum.HipHeight = estadoOriginal.HipHeight
     end)
 
-    -- Desconecta conexões internas
     for _, c in ipairs(self.conexoes) do
         pcall(function() c:Disconnect() end)
     end
     self.conexoes = {}
 end
 
--- Clamp suave pra não parecer speed hack
--- Se a velocidade for muito alta, limita o vetor real aplicado
 function AntiDetect:clampVelocidade(vec)
     local mag = vec.Magnitude
     if mag > VELOCIDADE_MAX_FISICA then
@@ -145,7 +128,7 @@ end
 -- ==================================================
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "VooGui_" .. tostring(math.random(100, 999)) -- nome aleatório
+screenGui.Name = "VooGui_" .. tostring(math.random(100, 999))
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -176,7 +159,7 @@ local function criarBotao(nome, texto, tamanho, posicao, corFundo, parent)
     btn.Size = tamanho
     btn.Position = posicao
     btn.BackgroundColor3 = corFundo or COR_BOTAO
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextColor3 = Color3.new(1, 1, 1)
     btn.TextScaled = true
     btn.Font = Enum.Font.GothamBold
     btn.BorderSizePixel = 0
@@ -207,7 +190,7 @@ labelVelocidade.Name = "LabelVelocidade"
 labelVelocidade.Size = UDim2.new(0, 90, 0, 50)
 labelVelocidade.Position = UDim2.new(0.5, -45, 0, 70)
 labelVelocidade.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-labelVelocidade.TextColor3 = Color3.fromRGB(255, 255, 255)
+labelVelocidade.TextColor3 = Color3.new(1, 1, 1)
 labelVelocidade.Text = tostring(velocidade)
 labelVelocidade.TextScaled = true
 labelVelocidade.Font = Enum.Font.GothamBold
@@ -237,25 +220,30 @@ labelTitulo.Parent = container
 local botaoMais = criarBotao("BotaoMais", "+",
     UDim2.new(0, 60, 0, 50), UDim2.new(1, -75, 0, 70), COR_BOTAO, container)
 
--- Controles Mobile
+-- ==================================================
+-- CONTROLES MOBILE (2 botões: ↑ e ↓ ao lado do pulo)
+-- ==================================================
+
 local controlesMobile = Instance.new("Frame")
 controlesMobile.Name = "ControlesMobile"
-controlesMobile.Size = UDim2.new(0, 220, 0, 220)
-controlesMobile.Position = UDim2.new(0, 20, 1, -240)
+controlesMobile.AnchorPoint = Vector2.new(1, 1)
+controlesMobile.Position = UDim2.new(1, -120, 1, -30)
+controlesMobile.Size = UDim2.new(0, 120, 0, 200)
 controlesMobile.BackgroundTransparency = 1
 controlesMobile.Visible = false
 controlesMobile.Parent = screenGui
 
-local function criarBotaoDirecao(nome, posicao, texto)
+-- Função pra criar botão redondo (estilo touch do Roblox)
+local function criarBotaoMobile(nome, texto, posicao, tamanho)
     local btn = Instance.new("TextButton")
     btn.Name = nome
-    btn.Size = UDim2.new(0, 70, 0, 70)
-    btn.Position = posicao
     btn.Text = texto
+    btn.Size = tamanho
+    btn.Position = posicao
+    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundTransparency = 0.5
+    btn.TextColor3 = Color3.new(1, 1, 1)
     btn.TextScaled = true
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    btn.BackgroundTransparency = 0.2
     btn.Font = Enum.Font.GothamBold
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = true
@@ -265,15 +253,26 @@ local function criarBotaoDirecao(nome, posicao, texto)
     corner.CornerRadius = UDim.new(1, 0)
     corner.Parent = btn
 
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.3
+    stroke.Parent = btn
+
     return btn
 end
 
-local btnCima  = criarBotaoDirecao("Cima",     UDim2.new(0, 75, 0, 0),   "▲")
-local btnBaixo = criarBotaoDirecao("Baixo",    UDim2.new(0, 75, 0, 150), "▼")
-local btnEsq   = criarBotaoDirecao("Esquerda", UDim2.new(0, 0,  0, 75),  "◀")
-local btnDir   = criarBotaoDirecao("Direita",  UDim2.new(0, 150,0, 75),  "▶")
+-- Botão SUBIR (↑) — em cima
+local btnSubir = criarBotaoMobile("Subir", "↑",
+    UDim2.new(0, 0, 0, 0),
+    UDim2.new(0, 80, 0, 80))
 
--- Botão Reabrir
+-- Botão DESCER (↓) — embaixo
+local btnDescer = criarBotaoMobile("Descer", "↓",
+    UDim2.new(0, 0, 0, 110),
+    UDim2.new(0, 80, 0, 80))
+
+-- Botão Reabrir (fora do container)
 local botaoReabrir = criarBotao("BotaoReabrir", "☰ Abrir Voo",
     UDim2.new(0, 130, 0, 45), UDim2.new(0, 20, 0.05, 0),
     Color3.fromRGB(0, 120, 200), screenGui)
@@ -292,8 +291,6 @@ local function atualizarLabel()
 end
 
 local function ativarVoo()
-    -- Cria BodyMovers com nomes "disfarçados"
-    -- Isso dificulta detecção por scripts que procuram "BodyVelocity"/"BodyGyro"
     bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.Name = antiDetect.nomeAleatorio .. "_BV"
     bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -308,7 +305,6 @@ local function ativarVoo()
     bodyGyro.CFrame = rootPart.CFrame
     bodyGyro.Parent = rootPart
 
-    -- Aplica anti-detect
     antiDetect:iniciar()
 
     local camera = workspace.CurrentCamera
@@ -318,7 +314,7 @@ local function ativarVoo()
 
         local direcao = Vector3.zero
 
-        -- PC
+        -- PC: WASD
         if not isMobile then
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then direcao += camera.CFrame.LookVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then direcao -= camera.CFrame.LookVector end
@@ -326,18 +322,14 @@ local function ativarVoo()
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then direcao += camera.CFrame.RightVector end
         end
 
-        -- Mobile
+        -- Mobile: só usa o joystick nativo para mover horizontalmente
         if isMobile then
-            if btnEsq:GetAttribute("pressionado") then direcao -= camera.CFrame.RightVector end
-            if btnDir:GetAttribute("pressionado") then direcao += camera.CFrame.RightVector end
-
             local moveDir = humanoid.MoveDirection
             if moveDir.Magnitude > 0.1 then
                 direcao += moveDir
             end
         end
 
-        -- Monta o vetor final
         local velFinal
         if direcao.Magnitude > 0 then
             velFinal = (direcao.Unit * velocidade) + velocidadeAtual
@@ -345,9 +337,7 @@ local function ativarVoo()
             velFinal = velocidadeAtual
         end
 
-        -- Anti-detect: limita a velocidade física pra não parecer speed hack
         bodyVelocity.Velocity = antiDetect:clampVelocidade(velFinal)
-
         bodyGyro.CFrame = CFrame.new(rootPart.Position, rootPart.Position + camera.CFrame.LookVector)
     end)
 
@@ -355,7 +345,6 @@ local function ativarVoo()
 end
 
 local function desativarVoo()
-    -- Para anti-detect primeiro (restaura estados)
     if antiDetect then
         antiDetect:parar()
     end
@@ -376,7 +365,6 @@ local function configurarPersonagem(char)
     humanoid = char:WaitForChild("Humanoid")
     rootPart = char:WaitForChild("HumanoidRootPart")
 
-    -- Cria nova instância de anti-detect pra esse personagem
     antiDetect = AntiDetect.new(humanoid, rootPart)
 
     if voando then
@@ -464,23 +452,41 @@ botaoReabrir.MouseButton1Click:Connect(function()
     end
 end)
 
--- Mobile
-local function configurarBotaoToque(btn)
-    btn.MouseButton1Down:Connect(function() btn:SetAttribute("pressionado", true) end)
-    btn.MouseButton1Up:Connect(function() btn:SetAttribute("pressionado", false) end)
-    btn.MouseLeave:Connect(function() btn:SetAttribute("pressionado", false) end)
+-- ==================================================
+-- BOTÕES MOBILE: SUBIR / DESCER
+-- ==================================================
+
+local function configurarToque(btn)
+    btn.MouseButton1Down:Connect(function()
+        btn:SetAttribute("pressionado", true)
+    end)
+    btn.MouseButton1Up:Connect(function()
+        btn:SetAttribute("pressionado", false)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn:SetAttribute("pressionado", false)
+    end)
+    btn.TouchTap:Connect(function() end)
 end
 
-configurarBotaoToque(btnEsq)
-configurarBotaoToque(btnDir)
+configurarToque(btnSubir)
+configurarToque(btnDescer)
 
-btnCima.MouseButton1Down:Connect(function() velocidadeAtual = Vector3.new(0, FORCA_SUBIR, 0) end)
-btnCima.MouseButton1Up:Connect(function() velocidadeAtual = Vector3.zero end)
-btnCima.MouseLeave:Connect(function() velocidadeAtual = Vector3.zero end)
+-- Loop de atualização dos botões mobile
+RunService.RenderStepped:Connect(function()
+    if not voando then
+        velocidadeAtual = Vector3.zero
+        return
+    end
 
-btnBaixo.MouseButton1Down:Connect(function() velocidadeAtual = Vector3.new(0, -FORCA_SUBIR, 0) end)
-btnBaixo.MouseButton1Up:Connect(function() velocidadeAtual = Vector3.zero end)
-btnBaixo.MouseLeave:Connect(function() velocidadeAtual = Vector3.zero end)
+    if btnSubir:GetAttribute("pressionado") then
+        velocidadeAtual = Vector3.new(0, FORCA_SUBIR, 0)
+    elseif btnDescer:GetAttribute("pressionado") then
+        velocidadeAtual = Vector3.new(0, -FORCA_SUBIR, 0)
+    else
+        velocidadeAtual = Vector3.zero
+    end
+end)
 
 -- ==================================================
 -- INICIALIZAÇÃO
