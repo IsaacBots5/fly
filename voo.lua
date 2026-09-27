@@ -2,6 +2,7 @@
 -- SCRIPT DE VOO COMPLETO (PC + MOBILE)
 -- Com GUI automática + Anti-Detect
 -- 2 botões mobile: ↑ subir / ↓ descer
+-- Corrigido: boneco não trava ao parar de voar
 -- ================================================
 
 local Players = game:GetService("Players")
@@ -96,6 +97,15 @@ function AntiDetect:parar()
 
     local hum = self.humanoid
 
+    -- Desconecta conexões internas primeiro
+    for _, c in ipairs(self.conexoes) do
+        pcall(function() c:Disconnect() end)
+    end
+    self.conexoes = {}
+
+    if not hum or not hum.Parent then return end
+
+    -- Restaura estados
     pcall(function()
         hum:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
         hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
@@ -103,16 +113,12 @@ function AntiDetect:parar()
         hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
     end)
 
+    -- Restaura propriedades originais
     pcall(function()
         hum.WalkSpeed = estadoOriginal.WalkSpeed
         hum.JumpPower = estadoOriginal.JumpPower
         hum.HipHeight = estadoOriginal.HipHeight
     end)
-
-    for _, c in ipairs(self.conexoes) do
-        pcall(function() c:Disconnect() end)
-    end
-    self.conexoes = {}
 end
 
 function AntiDetect:clampVelocidade(vec)
@@ -233,7 +239,6 @@ controlesMobile.BackgroundTransparency = 1
 controlesMobile.Visible = false
 controlesMobile.Parent = screenGui
 
--- Função pra criar botão redondo (estilo touch do Roblox)
 local function criarBotaoMobile(nome, texto, posicao, tamanho)
     local btn = Instance.new("TextButton")
     btn.Name = nome
@@ -262,12 +267,10 @@ local function criarBotaoMobile(nome, texto, posicao, tamanho)
     return btn
 end
 
--- Botão SUBIR (↑) — em cima
 local btnSubir = criarBotaoMobile("Subir", "↑",
     UDim2.new(0, 0, 0, 0),
     UDim2.new(0, 80, 0, 80))
 
--- Botão DESCER (↓) — embaixo
 local btnDescer = criarBotaoMobile("Descer", "↓",
     UDim2.new(0, 0, 0, 110),
     UDim2.new(0, 80, 0, 80))
@@ -314,7 +317,6 @@ local function ativarVoo()
 
         local direcao = Vector3.zero
 
-        -- PC: WASD
         if not isMobile then
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then direcao += camera.CFrame.LookVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then direcao -= camera.CFrame.LookVector end
@@ -322,7 +324,6 @@ local function ativarVoo()
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then direcao += camera.CFrame.RightVector end
         end
 
-        -- Mobile: só usa o joystick nativo para mover horizontalmente
         if isMobile then
             local moveDir = humanoid.MoveDirection
             if moveDir.Magnitude > 0.1 then
@@ -345,14 +346,57 @@ local function ativarVoo()
 end
 
 local function desativarVoo()
+    -- 1. Para o anti-detect PRIMEIRO (restaura estados do Humanoid)
     if antiDetect then
         antiDetect:parar()
     end
 
-    if bodyVelocity then bodyVelocity:Destroy() end
-    if bodyGyro then bodyGyro:Destroy() end
-    if conexaoRender then conexaoRender:Disconnect() end
+    -- 2. Desconecta o loop de render
+    if conexaoRender then
+        conexaoRender:Disconnect()
+        conexaoRender = nil
+    end
+
+    -- 3. Zera a velocidade dos BodyMovers ANTES de destruir
+    if bodyVelocity then
+        bodyVelocity.Velocity = Vector3.zero
+        bodyVelocity.MaxForce = Vector3.zero
+        bodyVelocity:Destroy()
+        bodyVelocity = nil
+    end
+
+    if bodyGyro then
+        bodyGyro.MaxTorque = Vector3.zero
+        bodyGyro:Destroy()
+        bodyGyro = nil
+    end
+
+    -- 4. Reseta a velocidade do personagem
     velocidadeAtual = Vector3.zero
+
+    if rootPart then
+        rootPart.AssemblyLinearVelocity = Vector3.zero
+        rootPart.AssemblyAngularVelocity = Vector3.zero
+    end
+
+    -- 5. Força o Humanoid a voltar ao normal
+    if humanoid then
+        humanoid.PlatformStand = false
+        pcall(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end)
+
+        task.wait(0.05)
+
+        pcall(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
+        task.wait(0.05)
+        pcall(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        end)
+    end
+
     controlesMobile.Visible = false
 end
 
@@ -466,13 +510,11 @@ local function configurarToque(btn)
     btn.MouseLeave:Connect(function()
         btn:SetAttribute("pressionado", false)
     end)
-    btn.TouchTap:Connect(function() end)
 end
 
 configurarToque(btnSubir)
 configurarToque(btnDescer)
 
--- Loop de atualização dos botões mobile
 RunService.RenderStepped:Connect(function()
     if not voando then
         velocidadeAtual = Vector3.zero
