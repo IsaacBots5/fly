@@ -1,9 +1,8 @@
 -- ================================================
--- SCRIPT DE VOO COMPLETO (PC + MOBILE)
--- Fly estilo famoso:
---   - Olha pra CIMA e anda = sobe
---   - Olha pra BAIXO e anda = desce
--- Botão mover (✥/🔒), minimizar e fechar
+-- FLY ESTILO ADMIN PANEL (com GUI e botão)
+-- Clique no botão para ativar/desativar
+-- Espaço = subir | Shift = descer
+-- W/A/S/D move horizontal
 -- ================================================
 
 local Players = game:GetService("Players")
@@ -13,9 +12,9 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
 -- ============ CONFIGURAÇÕES ============
-local VELOCIDADE_MIN = 10
+local VELOCIDADE_MIN = 30
 local VELOCIDADE_MAX = 300
-local VELOCIDADE_INICIAL = 70
+local VELOCIDADE_INICIAL = 120
 local PASSO_VELOCIDADE = 10
 local VELOCIDADE_MAX_FISICA = 250
 
@@ -64,54 +63,34 @@ end
 function AntiDetect:iniciar()
     if self.ativo then return end
     self.ativo = true
-
     local hum = self.humanoid
-    local root = self.rootPart
-
     estadoOriginal.WalkSpeed = hum.WalkSpeed
     estadoOriginal.JumpPower = hum.JumpPower
     estadoOriginal.HipHeight = hum.HipHeight
-
     hum:SetStateEnabled(Enum.HumanoidStateType.Flying, false)
     hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
     hum:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
     hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-    hum:ChangeState(Enum.HumanoidStateType.Physics)
-
-    self.conexoes[#self.conexoes + 1] = RunService.Stepped:Connect(function()
-        if not hum or not hum.Parent then return end
-        if hum.FloorMaterial == Enum.Material.Air then
-            pcall(function()
-                hum:ChangeState(Enum.HumanoidStateType.Physics)
-            end)
-        end
-    end)
-
     pcall(function()
-        root:SetNetworkOwner(player)
+        self.rootPart:SetNetworkOwner(player)
     end)
 end
 
 function AntiDetect:parar()
     if not self.ativo then return end
     self.ativo = false
-
     local hum = self.humanoid
-
     for _, c in ipairs(self.conexoes) do
         pcall(function() c:Disconnect() end)
     end
     self.conexoes = {}
-
     if not hum or not hum.Parent then return end
-
     pcall(function()
         hum:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
         hum:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
         hum:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
         hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
     end)
-
     pcall(function()
         hum.WalkSpeed = estadoOriginal.WalkSpeed
         hum.JumpPower = estadoOriginal.JumpPower
@@ -132,7 +111,7 @@ end
 -- ==================================================
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "VooGui_" .. tostring(math.random(100, 999))
+screenGui.Name = "FlyGui_" .. tostring(math.random(100, 999))
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -140,7 +119,7 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local container = Instance.new("Frame")
 container.Name = "Container"
-container.Size = UDim2.new(0, 260, 0, 200)
+container.Size = UDim2.new(0, 260, 0, 210)
 container.Position = UDim2.new(0, 20, 0.3, 0)
 container.BackgroundColor3 = COR_FUNDO
 container.BackgroundTransparency = 0.1
@@ -169,16 +148,14 @@ local function criarBotao(nome, texto, tamanho, posicao, corFundo, parent)
     btn.BorderSizePixel = 0
     btn.AutoButtonColor = true
     btn.Parent = parent
-
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = btn
-
     return btn
 end
 
 -- Botão VOAR
-local botaoVoo = criarBotao("BotaoVoo", "Voar: OFF",
+local botaoVoo = criarBotao("BotaoVoo", "✈ Voar: OFF",
     UDim2.new(1, -130, 0, 45), UDim2.new(0, 10, 0, 10), COR_OFF, container)
 
 -- Botão MINIMIZAR
@@ -239,17 +216,17 @@ local botaoMais = criarBotao("BotaoMais", "+",
 local labelDica = Instance.new("TextLabel")
 labelDica.Name = "LabelDica"
 labelDica.Size = UDim2.new(1, -20, 0, 18)
-labelDica.Position = UDim2.new(0, 10, 0, 178)
+labelDica.Position = UDim2.new(0, 10, 0, 185)
 labelDica.BackgroundTransparency = 1
 labelDica.TextColor3 = Color3.fromRGB(140, 140, 150)
-labelDica.Text = "Olhe p/ cima e ande = subir | p/ baixo = descer"
+labelDica.Text = "Espaço = subir | Shift = descer"
 labelDica.TextScaled = true
 labelDica.Font = Enum.Font.Gotham
 labelDica.Parent = container
 
--- Botão Reabrir (fora do container)
-local botaoReabrir = criarBotao("BotaoReabrir", "☰ Abrir Voo",
-    UDim2.new(0, 130, 0, 45), UDim2.new(0, 20, 0.05, 0),
+-- Botão Reabrir
+local botaoReabrir = criarBotao("BotaoReabrir", "✈ Abrir Fly",
+    UDim2.new(0, 120, 0, 40), UDim2.new(0, 20, 0.05, 0),
     Color3.fromRGB(0, 120, 200), screenGui)
 botaoReabrir.Visible = false
 botaoReabrir.TextScaled = false
@@ -281,8 +258,6 @@ local function ativarVoo()
     bodyGyro.Parent = rootPart
 
     antiDetect:iniciar()
-
-    -- Deixa o Humanoid "solto" pra ele não tentar corrigir a posição
     humanoid.PlatformStand = true
     humanoid.AutoRotate = false
 
@@ -291,61 +266,50 @@ local function ativarVoo()
     conexaoRender = RunService.RenderStepped:Connect(function()
         if not bodyVelocity or not bodyVelocity.Parent then return end
 
-        -- ============================================
-        -- MONTA O VETOR USANDO A CÂMERA (inclui Y)
-        -- ============================================
         local direcao = Vector3.zero
 
-        if isMobile then
-            -- Mobile: usa o joystick nativo
-            local moveDir = humanoid.MoveDirection
-            if moveDir.Magnitude > 0.1 then
-                local camCF = camera.CFrame
-                local dirBase = moveDir.Unit
-
-                -- Reconstrói usando os eixos da câmera (COM Y)
-                local dirX = camCF.RightVector * dirBase.X
-                local dirZ = camCF.LookVector * dirBase.Z
-                local dirY = camCF.UpVector * dirBase.Y
-
-                direcao = dirX + dirZ + dirY
-            end
-        else
-            -- PC: teclas + câmera (COM Y)
+        if not isMobile then
+            -- PC: WASD move horizontal (sem afetar Y)
             local camCF = camera.CFrame
+            local lookFlat = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
+            local rightFlat = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
 
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                direcao += camCF.LookVector
+                direcao += lookFlat
             end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                direcao -= camCF.LookVector
+                direcao -= lookFlat
             end
             if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                direcao -= camCF.RightVector
+                direcao -= rightFlat
             end
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                direcao += camCF.RightVector
+                direcao += rightFlat
             end
+
+            -- Espaço sobe / Shift esquerdo desce
             if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
                 direcao += Vector3.new(0, 1, 0)
             end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
                 direcao -= Vector3.new(0, 1, 0)
+            end
+        else
+            -- Mobile: joystick nativo para horizontal
+            local moveDir = humanoid.MoveDirection
+            if moveDir.Magnitude > 0.1 then
+                direcao += Vector3.new(moveDir.X, 0, moveDir.Z)
             end
         end
 
-        -- Aplica velocidade
         if direcao.Magnitude > 0.1 then
             bodyVelocity.Velocity = antiDetect:clampVelocidade(direcao.Unit * velocidade)
         else
             bodyVelocity.Velocity = Vector3.zero
         end
 
-        -- Trava a rotação pra olhar na direção da câmera
         bodyGyro.CFrame = CFrame.new(rootPart.Position, rootPart.Position + camera.CFrame.LookVector)
     end)
-
-    controlesMobile.Visible = false
 end
 
 local function desativarVoo()
@@ -409,7 +373,7 @@ local function configurarPersonagem(char)
     if voando then
         voando = false
         desativarVoo()
-        botaoVoo.Text = "Voar: OFF"
+        botaoVoo.Text = "✈ Voar: OFF"
         botaoVoo.BackgroundColor3 = COR_OFF
     end
 end
@@ -420,7 +384,7 @@ end
 player.CharacterAdded:Connect(configurarPersonagem)
 
 -- ==================================================
--- CONEXÕES DOS BOTÕES
+-- BOTÃO DE VOAR
 -- ==================================================
 
 botaoVoo.MouseButton1Click:Connect(function()
@@ -428,14 +392,18 @@ botaoVoo.MouseButton1Click:Connect(function()
     voando = not voando
     if voando then
         ativarVoo()
-        botaoVoo.Text = "Voar: ON"
+        botaoVoo.Text = "✈ Voar: ON"
         botaoVoo.BackgroundColor3 = COR_OK
     else
         desativarVoo()
-        botaoVoo.Text = "Voar: OFF"
+        botaoVoo.Text = "✈ Voar: OFF"
         botaoVoo.BackgroundColor3 = COR_OFF
     end
 end)
+
+-- ==================================================
+-- BOTÕES DE VELOCIDADE
+-- ==================================================
 
 botaoMais.MouseButton1Click:Connect(function()
     velocidade = math.min(velocidade + PASSO_VELOCIDADE, VELOCIDADE_MAX)
@@ -446,6 +414,10 @@ botaoMenos.MouseButton1Click:Connect(function()
     velocidade = math.max(velocidade - PASSO_VELOCIDADE, VELOCIDADE_MIN)
     atualizarLabel()
 end)
+
+-- ==================================================
+-- MINIMIZAR / FECHAR / REABRIR
+-- ==================================================
 
 local function esconderElementos(visivel)
     botaoVoo.Visible = visivel
@@ -465,7 +437,7 @@ botaoMinimizar.MouseButton1Click:Connect(function()
     else
         esconderElementos(true)
         botaoMinimizar.Text = "—"
-        container.Size = UDim2.new(0, 260, 0, 200)
+        container.Size = UDim2.new(0, 260, 0, 210)
     end
 end)
 
@@ -473,7 +445,7 @@ botaoFechar.MouseButton1Click:Connect(function()
     if voando then
         voando = false
         desativarVoo()
-        botaoVoo.Text = "Voar: OFF"
+        botaoVoo.Text = "✈ Voar: OFF"
         botaoVoo.BackgroundColor3 = COR_OFF
     end
     container.Visible = false
@@ -487,12 +459,12 @@ botaoReabrir.MouseButton1Click:Connect(function()
         minimizado = false
         esconderElementos(true)
         botaoMinimizar.Text = "—"
-        container.Size = UDim2.new(0, 260, 0, 200)
+        container.Size = UDim2.new(0, 260, 0, 210)
     end
 end)
 
 -- ==================================================
--- SISTEMA DE ARRASTAR A GUI
+-- SISTEMA DE ARRASTAR
 -- ==================================================
 
 local movendo = false
@@ -500,18 +472,16 @@ local arrastando = false
 local inicioToque = Vector2.new(0, 0)
 local posicaoInicial = UDim2.new(0, 0, 0, 0)
 
-local function toqueDentroDoContainer(input)
+local function toqueDentro(input)
     local pos = input.Position
     local guiPos = container.AbsolutePosition
     local guiSize = container.AbsoluteSize
-
     return pos.X >= guiPos.X and pos.X <= guiPos.X + guiSize.X
         and pos.Y >= guiPos.Y and pos.Y <= guiPos.Y + guiSize.Y
 end
 
 botaoMover.MouseButton1Click:Connect(function()
     movendo = not movendo
-
     if movendo then
         botaoMover.Text = "🔒"
         botaoMover.BackgroundColor3 = COR_MOVER_ATIVO
@@ -524,14 +494,11 @@ end)
 UserInputService.InputBegan:Connect(function(input, processado)
     if processado then return end
     if not movendo then return end
-    if not toqueDentroDoContainer(input) then return end
+    if not toqueDentro(input) then return end
 
-    -- Ignora se tocou em um botão
     local guiObjects = player.PlayerGui:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
     for _, obj in ipairs(guiObjects) do
-        if obj:IsA("TextButton") then
-            return
-        end
+        if obj:IsA("TextButton") then return end
     end
 
     arrastando = true
@@ -543,17 +510,12 @@ UserInputService.InputChanged:Connect(function(input, processado)
     if processado then return end
     if not arrastando then return end
     if input.UserInputType ~= Enum.UserInputType.MouseMovement
-        and input.UserInputType ~= Enum.UserInputType.Touch then
-        return
-    end
+        and input.UserInputType ~= Enum.UserInputType.Touch then return end
 
     local delta = Vector2.new(input.Position.X, input.Position.Y) - inicioToque
-
     container.Position = UDim2.new(
-        posicaoInicial.X.Scale,
-        posicaoInicial.X.Offset + delta.X,
-        posicaoInicial.Y.Scale,
-        posicaoInicial.Y.Offset + delta.Y
+        posicaoInicial.X.Scale, posicaoInicial.X.Offset + delta.X,
+        posicaoInicial.Y.Scale, posicaoInicial.Y.Offset + delta.Y
     )
 end)
 
