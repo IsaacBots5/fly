@@ -1,8 +1,8 @@
 -- ================================================
--- FLY ESTILO ADMIN PANEL (com GUI e botão)
--- Clique no botão para ativar/desativar
--- Espaço = subir | Shift = descer
--- W/A/S/D move horizontal
+-- FLY COMPLETO (PC + MOBILE)
+-- PC: Espaço sobe / Shift desce / WASD move
+-- Mobile: Botões ↑↓ para subir/descer + joystick para mover
+-- Com GUI, velocidade, mover, minimizar e fechar
 -- ================================================
 
 local Players = game:GetService("Players")
@@ -233,6 +233,68 @@ botaoReabrir.TextScaled = false
 botaoReabrir.TextSize = 16
 
 -- ==================================================
+-- BOTÕES MOBILE (↑ ↓) - aparecem só no mobile
+-- ==================================================
+
+local controlesMobile = Instance.new("Frame")
+controlesMobile.Name = "ControlesMobile"
+controlesMobile.AnchorPoint = Vector2.new(1, 1)
+controlesMobile.Position = UDim2.new(1, -30, 1, -30)
+controlesMobile.Size = UDim2.new(0, 90, 0, 180)
+controlesMobile.BackgroundTransparency = 1
+controlesMobile.Visible = false
+controlesMobile.Parent = screenGui
+
+local function criarBotaoMobile(nome, texto, posicao)
+    local btn = Instance.new("TextButton")
+    btn.Name = nome
+    btn.Text = texto
+    btn.Size = UDim2.new(0, 80, 0, 80)
+    btn.Position = posicao
+    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundTransparency = 0.5
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.GothamBold
+    btn.BorderSizePixel = 0
+    btn.Parent = controlesMobile
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = btn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.3
+    stroke.Parent = btn
+
+    return btn
+end
+
+local btnSubir = criarBotaoMobile("Subir", "↑", UDim2.new(0, 5, 0, 0))
+local btnDescer = criarBotaoMobile("Descer", "↓", UDim2.new(0, 5, 0, 100))
+
+-- Configura os botões para detectar toque
+local function configurarToque(btn)
+    btn.MouseButton1Down:Connect(function()
+        btn:SetAttribute("pressionado", true)
+    end)
+    btn.MouseButton1Up:Connect(function()
+        btn:SetAttribute("pressionado", false)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn:SetAttribute("pressionado", false)
+    end)
+    -- Suporte extra para touch
+    btn.TouchLongPress:Connect(function() end)
+    btn.TouchTap:Connect(function() end)
+end
+
+configurarToque(btnSubir)
+configurarToque(btnDescer)
+
+-- ==================================================
 -- FUNÇÕES DE VOO
 -- ==================================================
 
@@ -287,7 +349,6 @@ local function ativarVoo()
                 direcao += rightFlat
             end
 
-            -- Espaço sobe / Shift esquerdo desce
             if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
                 direcao += Vector3.new(0, 1, 0)
             end
@@ -295,10 +356,23 @@ local function ativarVoo()
                 direcao -= Vector3.new(0, 1, 0)
             end
         else
-            -- Mobile: joystick nativo para horizontal
+            -- Mobile: joystick horizontal + botões ↑↓
             local moveDir = humanoid.MoveDirection
             if moveDir.Magnitude > 0.1 then
-                direcao += Vector3.new(moveDir.X, 0, moveDir.Z)
+                local camCF = camera.CFrame
+                local lookFlat = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
+                local rightFlat = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
+
+                direcao += lookFlat * moveDir.Z
+                direcao += rightFlat * moveDir.X
+            end
+
+            -- Botões ↑↓
+            if btnSubir:GetAttribute("pressionado") then
+                direcao += Vector3.new(0, 1, 0)
+            end
+            if btnDescer:GetAttribute("pressionado") then
+                direcao -= Vector3.new(0, 1, 0)
             end
         end
 
@@ -310,6 +384,11 @@ local function ativarVoo()
 
         bodyGyro.CFrame = CFrame.new(rootPart.Position, rootPart.Position + camera.CFrame.LookVector)
     end)
+
+    -- Mostra os botões ↑↓ no mobile
+    if isMobile then
+        controlesMobile.Visible = true
+    end
 end
 
 local function desativarVoo()
@@ -357,6 +436,9 @@ local function desativarVoo()
             humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end)
     end
+
+    -- Esconde os botões mobile
+    controlesMobile.Visible = false
 end
 
 -- ==================================================
